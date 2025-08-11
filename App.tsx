@@ -1,7 +1,7 @@
 /**
  * Sample React Native App
  * https://github.com/facebook/react-native
- * 초기설정이야이야
+ * 초기설정입니다요
  * @format
  */
 
