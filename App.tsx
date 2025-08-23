@@ -34,7 +34,7 @@ export interface Hospital {
   reviews: number;
   department: string;
   image: string | null;
-  y: number; // latitude
+  y: number; // latitudefldor
   x: number; // longitude
   address: string;
   distance: number;
