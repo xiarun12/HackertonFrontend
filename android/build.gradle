@@ -6,6 +6,8 @@ buildscript {
         targetSdkVersion = 35
         ndkVersion = "27.1.12297006"
         kotlinVersion = "2.1.20"
+        // 아래 한 줄을 추가했습니다.
+        playServicesLocationVersion = "21.0.1"
     }
     repositories {
         google()
