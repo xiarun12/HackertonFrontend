@@ -10,11 +10,13 @@ const LoadingScreen = () => {
     const navigation = useNavigation<NavProp>();
 
     useEffect(() => {
-        // 3초 뒤 Home 화면으로 이동
+        // 3초 뒤 HospitalFinderScreen 화면으로 이동
         const timer = setTimeout(() => {
-            navigation.replace("Home"); 
+            // 여기를 수정했습니다!
+            navigation.replace("HospitalFinder"); 
         }, 3000);
 
+        // 화면이 언마운트될 때 타이머를 정리합니다.
         return () => clearTimeout(timer); 
     }, [navigation]);
 
