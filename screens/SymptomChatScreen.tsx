@@ -175,7 +175,6 @@ const SymptomChatScreen = () => {
 
 export default SymptomChatScreen;
 
-// --- 스타일 (기존과 동일) ---
 const styles = StyleSheet.create({
   container: { 
     flex: 1, 
@@ -319,5 +318,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginLeft: 10,
+  },
+  // 오류 해결을 위해 추가된 부분
+  sendButtonText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
   },
 });

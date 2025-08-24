@@ -5,6 +5,11 @@ import {
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { useRoute, useNavigation } from '@react-navigation/native';
+// AsyncStorage를 사용하기 위해 import 합니다.
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// API URL (상수는 파일 상단에서 관리하는 것이 좋습니다)
+const API_BASE_URL = "http://43.203.141.216:8080/api";
 
 const HospitalDetailScreen = () => {
     const route = useRoute();
@@ -14,47 +19,70 @@ const HospitalDetailScreen = () => {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        if (hospital) {
+        if (hospital?.id) {
             fetchHospitalDetails();
         } else {
+            Alert.alert("오류", "병원 정보가 올바르지 않습니다.");
             setLoading(false);
         }
     }, [hospital]);
 
+    // --- ⬇️ 수정된 부분: 실제 API 호출 함수 ⬇️ ---
     const fetchHospitalDetails = async () => {
         setLoading(true);
         try {
-            await new Promise(resolve => setTimeout(resolve, 1500));
-            const mockApiData = {
-                currentPatients: 2,
-                waitingPatients: 3,
-                waitingTime: '15분',
-                registrationInfo: '접수 및 서류 안내',
-                preRegistration: '문진표 사전 작성/제출',
-                preRegistrationDesc: '대기 시간 절약\n현장 작성 불필요',
-                insuranceClaim: '보험 · 영수증 간편 청구',
-                insuranceClaimDesc: '실손보험 기준 자동 반영\n안전하고 정확한 청구 서비스',
-                phone: '02-1234-5678',
-                locationInfo: '위치 안내 및 주차 정보',
-                openingHours: {
-                    daily: '오늘 8:30 ~ 17:30',
-                    emergency: '응급센터 00:00 ~ 24:00'
-                }
-            };
-            setDetailData(mockApiData);
+            // 1. AsyncStorage에서 토큰 가져오기
+            const userToken = await AsyncStorage.getItem('accessToken');
+            if (!userToken) {
+                throw new Error("로그인이 필요합니다. 인증 토큰을 찾을 수 없습니다.");
+            }
+
+            // 2. GET 요청을 위한 URL 생성
+            // (사용자 위치 정보는 서버 API 명세에 따라 쿼리 파라미터로 추가할 수 있습니다)
+            const url = `${API_BASE_URL}/hospitals/${hospital.id}`;
+            console.log(`Requesting to: ${url}`);
+
+            // 3. API 호출
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${userToken}`,
+                },
+            });
+            
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ message: `서버 오류 (${response.status})` }));
+                throw new Error(errorData.message);
+            }
+
+            const result = await response.json();
+            
+            // 4. 서버로부터 받은 데이터를 state에 저장
+            // 서버 응답이 { "data": { ... } } 형태일 경우 result.data 사용
+            if (result.data) {
+                setDetailData(result.data);
+            } else {
+                // 응답 구조가 다를 경우에 대한 예외 처리
+                setDetailData(result);
+            }
+
         } catch (error) {
-            Alert.alert("오류", "병원 상세 정보를 불러오는 데 실패했습니다.");
+            Alert.alert("오류", error.message || "병원 상세 정보를 불러오는 데 실패했습니다.");
             setDetailData(null);
         } finally {
             setLoading(false);
         }
     };
+    // --- ⬆️ 여기까지 수정 ⬆️ ---
 
     const handleCall = () => {
-        if (detailData?.phone) {
+        if (detailData?.phone) { // API 응답에 'phone' 필드가 있다고 가정
             Linking.openURL(`tel:${detailData.phone}`).catch(() => {
-                Alert.alert("전화 연결 오류", "전화 연결을 할 수 없습니다.");
+                Alert.alert("전화 연결 오류", "전화 앱을 열 수 없습니다.");
             });
+        } else {
+            Alert.alert("알림", "등록된 전화번호가 없습니다.");
         }
     };
 
@@ -78,6 +106,14 @@ const HospitalDetailScreen = () => {
         );
     }
 
+    // 서버 응답 데이터에 맞게 변수명 수정 (예시)
+    const {
+        currentPatients = 0, waitingPatients = 0, waitingTime = 'N/A',
+        preRegistrationDesc = '대기 시간 절약\n현장 작성 불필요',
+        insuranceClaimDesc = '실손보험 기준 자동 반영\n안전하고 정확한 청구 서비스',
+        openingHours = { daily: hospital.hours, emergency: '24시간' }
+    } = detailData;
+
     return (
         <SafeAreaView style={styles.container}>
             <ScrollView showsVerticalScrollIndicator={false}>
@@ -86,7 +122,6 @@ const HospitalDetailScreen = () => {
                     {hospital.image ? (
                         <Image source={{ uri: hospital.image }} style={styles.hospitalImage} />
                     ) : (
-                        // 아이콘이 제거된 단순한 회색 View
                         <View style={[styles.hospitalImage, { backgroundColor: '#cccccc' }]} />
                     )}
                     <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
@@ -120,24 +155,24 @@ const HospitalDetailScreen = () => {
                         <Ionicons name="time-outline" size={16} color="#888" />
                         <View>
                             <Text style={styles.hoursText}>
-                                <Text style={{ fontWeight: 'bold' }}>진료 중</Text> · {detailData.openingHours.daily}
+                                <Text style={{ fontWeight: 'bold' }}>진료 중</Text> · {openingHours.daily}
                             </Text>
-                            <Text style={styles.emergencyHoursText}>응급센터 {detailData.openingHours.emergency}</Text>
+                            <Text style={styles.emergencyHoursText}>응급센터 {openingHours.emergency}</Text>
                         </View>
                     </View>
                 </View>
 
-                {/* API 기반 정보 및 버튼 섹션 (기존과 동일) */}
+                {/* API 기반 정보 및 버튼 섹션 */}
                 <View style={styles.dynamicContent}>
                     <View style={styles.waitingInfoBox}>
                          <Text style={styles.waitingText}>
-                            현재 진료: <Text style={{fontWeight: 'bold'}}>{detailData.currentPatients}명</Text> / 대기: <Text style={{fontWeight: 'bold'}}>{detailData.waitingPatients}명</Text>
+                            현재 진료: <Text style={{fontWeight: 'bold'}}>{currentPatients}명</Text> / 대기: <Text style={{fontWeight: 'bold'}}>{waitingPatients}명</Text>
                         </Text>
                     </View>
                     <TouchableOpacity style={styles.registerButton} onPress={() => Alert.alert('접수', '바로 접수 페이지로 이동합니다.')}>
                         <Ionicons name="timer-outline" size={24} color="#fff" />
                         <Text style={styles.registerText}>바로 접수하기</Text>
-                        <Text style={styles.waitingTimeText}>대기 {detailData.waitingPatients}명 · {detailData.waitingTime}</Text>
+                        <Text style={styles.waitingTimeText}>대기 {waitingPatients}명 · {waitingTime}</Text>
                     </TouchableOpacity>
                     <View style={styles.buttonGrid}>
                         <TouchableOpacity style={styles.gridButton}>
@@ -154,19 +189,19 @@ const HospitalDetailScreen = () => {
                         <TouchableOpacity style={styles.doubleButton}>
                             <MaterialIcons name="description" size={24} color="#555" />
                             <Text style={styles.doubleButtonTitle}>문진표 사전 작성/제출</Text>
-                            <Text style={styles.doubleButtonDesc}>{detailData.preRegistrationDesc}</Text>
+                            <Text style={styles.doubleButtonDesc}>{preRegistrationDesc}</Text>
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.doubleButton}>
                             <MaterialIcons name="medical-services-outline" size={24} color="#555" />
                             <Text style={styles.doubleButtonTitle}>보험 · 영수증 간편 청구</Text>
-                            <Text style={styles.doubleButtonDesc}>{detailData.insuranceClaimDesc}</Text>
+                            <Text style={styles.doubleButtonDesc}>{insuranceClaimDesc}</Text>
                         </TouchableOpacity>
                     </View>
                     <View style={styles.buttonRow}>
                         <TouchableOpacity style={styles.doubleButton} onPress={handleCall}>
                             <Ionicons name="call-outline" size={24} color="#555" />
                             <Text style={styles.doubleButtonTitle}>전화 문의</Text>
-                            <Text style={styles.doubleButtonDesc}></Text>
+                            <Text style={styles.doubleButtonDesc}>{detailData.phone || ''}</Text>
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.doubleButton}>
                             <Ionicons name="location-outline" size={24} color="#555" />

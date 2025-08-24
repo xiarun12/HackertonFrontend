@@ -2,8 +2,10 @@ import React, { useState } from "react";
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Image, Alert } from "react-native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import axios from "axios";
+// AsyncStorage를 사용하기 위해 import 합니다.
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Updated API URL as per the user's request.
+// API URL
 const API_URL = "http://43.203.141.216:8080/api";
 
 type Props = {
@@ -15,44 +17,49 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
   const [pw, setPw] = useState("");
 
   const handleLogin = async () => {
-    // 1. Validation
+    // 1. 유효성 검사
     if (!id || !pw) {
       Alert.alert("알림", "아이디와 비밀번호를 모두 입력해주세요.");
       return;
     }
 
-    // 2. API Request
+    // 2. API 요청
     try {
-      // The full URL is constructed by combining API_URL and the endpoint '/login'
       const response = await axios.post(`${API_URL}/login`, {
         userId: id,
         password: pw,
       });
 
-      // Request successful (200 OK)
+      // 요청 성공 (200 OK)
       if (response.status === 200) {
         const { accessToken, refreshToken } = response.data;
         console.log("Login Successful!");
         console.log("accessToken:", accessToken);
-        console.log("refreshToken:", refreshToken);
 
-        // TODO: Add logic to save tokens securely (e.g., AsyncStorage)
-        
-        // Navigate to the 'Home' screen on success
-        navigation.replace("Home");
+        // --- ⬇️ 수정된 부분: AsyncStorage에 토큰 저장 ⬇️ ---
+        try {
+          await AsyncStorage.setItem('accessToken', accessToken);
+          console.log('Access token saved successfully.');
+          
+          // 토큰 저장 후 'Home' 화면으로 이동
+          navigation.replace("Home");
+
+        } catch (e) {
+          console.error("Failed to save the token to storage", e);
+          Alert.alert("로그인 오류", "로그인 정보를 기기에 저장하는 데 실패했습니다.");
+        }
+        // --- ⬆️ 여기까지 수정 ⬆️ ---
+
       }
     } catch (error: any) {
-      // Handle Axios errors
+      // Axios 오류 처리
       if (axios.isAxiosError(error) && error.response) {
-        // 401 Unauthorized for incorrect credentials
         if (error.response.status === 401) {
           Alert.alert("로그인 실패", "아이디 또는 비밀번호가 올바르지 않습니다.");
         } else {
-          // Other server errors
           Alert.alert("로그인 실패", `서버 오류: ${error.response.status}`);
         }
       } else {
-        // Network connection errors
         Alert.alert("로그인 실패", "네트워크 오류가 발생했습니다.");
       }
     }
