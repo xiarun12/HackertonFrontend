@@ -15,7 +15,7 @@ const RegisterCompleteScreen: React.FC<Props> = ({ navigation }) => {
 
       <TouchableOpacity 
         style={styles.button} 
-        onPress={() => navigation.replace("Home")}
+        onPress={() => navigation.replace("Login")}
       >
         <Text style={styles.buttonText}>확인</Text>
       </TouchableOpacity>

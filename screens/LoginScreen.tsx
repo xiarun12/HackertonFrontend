@@ -1,12 +1,62 @@
 import React, { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Image } from "react-native";
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Image, Alert } from "react-native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import axios from "axios";
 
-type Props = { navigation: StackNavigationProp<any, any>; };
+// Updated API URL as per the user's request.
+const API_URL = "http://43.203.141.216:8080/api";
+
+type Props = {
+  navigation: StackNavigationProp<any, any>;
+};
 
 const LoginScreen: React.FC<Props> = ({ navigation }) => {
   const [id, setId] = useState("");
   const [pw, setPw] = useState("");
+
+  const handleLogin = async () => {
+    // 1. Validation
+    if (!id || !pw) {
+      Alert.alert("알림", "아이디와 비밀번호를 모두 입력해주세요.");
+      return;
+    }
+
+    // 2. API Request
+    try {
+      // The full URL is constructed by combining API_URL and the endpoint '/login'
+      const response = await axios.post(`${API_URL}/login`, {
+        userId: id,
+        password: pw,
+      });
+
+      // Request successful (200 OK)
+      if (response.status === 200) {
+        const { accessToken, refreshToken } = response.data;
+        console.log("Login Successful!");
+        console.log("accessToken:", accessToken);
+        console.log("refreshToken:", refreshToken);
+
+        // TODO: Add logic to save tokens securely (e.g., AsyncStorage)
+        
+        // Navigate to the 'Home' screen on success
+        navigation.replace("Home");
+      }
+    } catch (error: any) {
+      // Handle Axios errors
+      if (axios.isAxiosError(error) && error.response) {
+        // 401 Unauthorized for incorrect credentials
+        if (error.response.status === 401) {
+          Alert.alert("로그인 실패", "아이디 또는 비밀번호가 올바르지 않습니다.");
+        } else {
+          // Other server errors
+          Alert.alert("로그인 실패", `서버 오류: ${error.response.status}`);
+        }
+      } else {
+        // Network connection errors
+        Alert.alert("로그인 실패", "네트워크 오류가 발생했습니다.");
+      }
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -30,7 +80,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
         style={styles.input}
       />
 
-      <TouchableOpacity style={styles.button} onPress={() => navigation.replace("Home")}>
+      <TouchableOpacity style={styles.button} onPress={handleLogin}>
         <Text style={styles.buttonText}>로그인</Text>
       </TouchableOpacity>
 
@@ -50,27 +100,27 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
 export default LoginScreen;
 
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
+  container: {
+    flex: 1,
     paddingHorizontal: 40,
   },
   topSection: {
-    marginBottom: 80, 
-    marginTop: 130, 
+    marginBottom: 80,
+    marginTop: 130,
   },
-  logo: { 
-    width: 100, 
-    height: 100, 
-    marginBottom: 15, 
+  logo: {
+    width: 100,
+    height: 100,
+    marginBottom: 15,
     alignSelf: "flex-start",
   },
-  title: { 
-    fontSize: 20, 
-    fontWeight: "bold", 
+  title: {
+    fontSize: 20,
+    fontWeight: "bold",
     marginBottom: 15,
   },
-  subtitle: { 
-    fontSize: 14, 
+  subtitle: {
+    fontSize: 14,
     color: "gray",
   },
   input: {
