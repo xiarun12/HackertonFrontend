@@ -12,7 +12,7 @@ const LoadingScreen = () => {
     useEffect(() => {
         // 3초 뒤 HospitalFinderScreen 화면으로 이동
         const timer = setTimeout(() => {
-            // 여기를 수정했습니다!
+            // 여기를 수정했습니다!!!
             navigation.replace("HospitalFinder"); 
         }, 3000);
 
