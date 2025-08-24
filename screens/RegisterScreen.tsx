@@ -1,8 +1,15 @@
 import React, { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView } from "react-native";
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert } from "react-native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import axios from "axios";
 
-type Props = { navigation: StackNavigationProp<any, any>; };
+// 베이스 API URL을 상수로 분리하여 관리합니다.
+// 이렇게 하면 서버 주소가 변경될 때 여기만 수정하면 됩니다.
+const BASE_API_URL = "http://43.203.141.216:8080/api";
+
+type Props = {
+  navigation: StackNavigationProp<any, any>;
+};
 
 const RegisterScreen: React.FC<Props> = ({ navigation }) => {
   const [name, setName] = useState("");
@@ -17,6 +24,10 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
     privacy: false,
     thirdParty: false,
   });
+
+  // API 연동을 위한 상태 추가
+  const [idCheckMessage, setIdCheckMessage] = useState("");
+  const [isIdAvailable, setIsIdAvailable] = useState(false);
 
   const handleAllAgree = () => {
     const newAllState = !agreements.all;
@@ -37,18 +48,108 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
     setAgreements({ ...newAgreements, all: allAgreed });
   };
 
+  // 아이디 중복 확인 핸들러 (GET 요청 - URL 수정)
+  const handleIdCheck = async () => {
+    if (!id) {
+      setIdCheckMessage("아이디를 입력해주세요.");
+      setIsIdAvailable(false);
+      return;
+    }
+
+    try {
+      // '/user/{userid}' 엔드포인트로 GET 요청을 보냅니다.
+      await axios.get(`${BASE_API_URL}/user/${id}`);
+
+      // 요청이 성공하면 (200 OK) 아이디가 이미 있는 것이므로 실패 처리합니다.
+      setIdCheckMessage("이미 사용 중인 아이디입니다.");
+      setIsIdAvailable(false);
+
+    } catch (error: any) {
+      if (axios.isAxiosError(error) && error.response) {
+        // 404 오류가 발생하면 아이디가 없는 것이므로 성공 처리합니다.
+        if (error.response.status === 404) {
+          setIdCheckMessage("사용 가능한 아이디입니다.");
+          setIsIdAvailable(true);
+        } else {
+          // 404 이외의 다른 서버 오류
+          setIdCheckMessage("서버 오류가 발생했습니다. 다시 시도해주세요.");
+          setIsIdAvailable(false);
+        }
+      } else {
+        // 네트워크 오류 등 기타 오류
+        setIdCheckMessage("네트워크 오류가 발생했습니다.");
+        setIsIdAvailable(false);
+      }
+    }
+  };
+
+  // 회원가입 최종 제출 핸들러 (POST 요청)
+  const handleRegister = async () => {
+    // 1. 유효성 검사
+    if (!name || !id || !pw || !pwConfirm) {
+      Alert.alert("알림", "모든 필드를 입력해주세요.");
+      return;
+    }
+
+    if (pw !== pwConfirm) {
+      Alert.alert("알림", "비밀번호가 일치하지 않습니다.");
+      return;
+    }
+
+    if (!isIdAvailable) {
+      Alert.alert("알림", "아이디 중복 확인을 해주세요.");
+      return;
+    }
+
+    if (!agreements.terms || !agreements.privacy || !agreements.thirdParty) {
+      Alert.alert("알림", "필수 약관에 모두 동의해야 합니다.");
+      return;
+    }
+
+    // 2. API 요청 (회원가입은 '/register' 엔드포인트로 POST 요청)
+    try {
+      const response = await axios.post(`${BASE_API_URL}/register`, {
+        userId: id,
+        password: pw,
+        password2: pwConfirm,
+        nickname: name,
+      });
+
+      // 요청 성공 (200 OK)
+      if (response.status === 200) {
+        Alert.alert("회원가입 성공", "회원가입이 완료되었습니다.");
+        navigation.replace("RegisterComplete");
+      }
+    } catch (error: any) {
+      if (axios.isAxiosError(error) && error.response) {
+        if (error.response.status === 409) {
+          Alert.alert("회원가입 실패", "이미 사용 중인 아이디입니다.");
+        } else {
+          Alert.alert("회원가입 실패", `서버 오류: ${error.response.status}`);
+        }
+      } else {
+        Alert.alert("회원가입 실패", "네트워크 오류가 발생했습니다.");
+      }
+    }
+  };
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>회원가입을 위해{"\n"}정보를 입력해주세요.</Text>
 
       <TextInput placeholder="이름" style={styles.input} value={name} onChangeText={setName} />
-      
+
       <View style={styles.inputWithButton}>
         <TextInput placeholder="아이디" style={styles.inputFlex} value={id} onChangeText={setId} />
-        <TouchableOpacity style={styles.idCheckButton}>
+        <TouchableOpacity style={styles.idCheckButton} onPress={handleIdCheck}>
           <Text style={styles.idCheckButtonText}>중복 확인</Text>
         </TouchableOpacity>
       </View>
+      {idCheckMessage ? (
+        <Text style={[styles.messageText, isIdAvailable ? styles.successText : styles.errorText]}>
+          {idCheckMessage}
+        </Text>
+      ) : null}
 
       <View style={styles.inputWithIcon}>
         <TextInput
@@ -58,14 +159,14 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
           secureTextEntry={!isPwVisible}
           onChangeText={setPw}
         />
-        <TouchableOpacity 
-          onPressIn={() => setIsPwVisible(true)} 
+        <TouchableOpacity
+          onPressIn={() => setIsPwVisible(true)}
           onPressOut={() => setIsPwVisible(false)}
         >
-          <Text style={styles.icon}>{isPwVisible ? '👁' : '👁‍'}</Text>
+          <Text style={styles.icon}>{isPwVisible ? '👁️' : '👁️'}</Text>
         </TouchableOpacity>
       </View>
-      
+
       <View style={styles.inputWithIcon}>
         <TextInput
           placeholder="비밀번호 확인"
@@ -74,11 +175,11 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
           secureTextEntry={!isPwConfirmVisible}
           onChangeText={setPwConfirm}
         />
-        <TouchableOpacity 
-          onPressIn={() => setIsPwConfirmVisible(true)} 
+        <TouchableOpacity
+          onPressIn={() => setIsPwConfirmVisible(true)}
           onPressOut={() => setIsPwConfirmVisible(false)}
         >
-          <Text style={styles.icon}>{isPwConfirmVisible ? '👁' : '👁‍'}</Text>
+          <Text style={styles.icon}>{isPwConfirmVisible ? '👁️' : '👁️'}</Text>
         </TouchableOpacity>
       </View>
 
@@ -113,14 +214,14 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
           <Text style={[styles.agreementText, styles.boldText]}>개인정보의 제3자 제공에 동의합니다. *</Text>
         </TouchableOpacity>
       </View>
-      
+
       <Text style={styles.infoText}>이 약관에 동의하지 않을 수 있지만, 그럴 경우 아프지아냥 계정에 로그인할 수 없으며 새로운 계정을 생성할 수도 없습니다.</Text>
 
       <View style={styles.buttonRow}>
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
           <Text style={styles.backButtonText}>이전</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.continueButton} onPress={() => navigation.replace("RegisterComplete")}>
+        <TouchableOpacity style={styles.continueButton} onPress={handleRegister}>
           <Text style={styles.continueButtonText}>계속</Text>
         </TouchableOpacity>
       </View>
@@ -132,16 +233,16 @@ export default RegisterScreen;
 
 const styles = StyleSheet.create({
   container: {
-    flexGrow: 1, 
-    paddingHorizontal: 40, 
+    flexGrow: 1,
+    paddingHorizontal: 40,
     backgroundColor: "#fff",
     paddingTop: 80,
     paddingBottom: 40,
   },
   title: {
-    fontSize: 24, 
+    fontSize: 24,
     fontWeight: "bold",
-    marginBottom: 40, 
+    marginBottom: 40,
   },
   input: {
     borderWidth: 1,
@@ -156,7 +257,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#ddd",
     borderRadius: 8,
-    marginBottom: 15,
+    marginBottom: 5,
   },
   inputWithIcon: {
     flexDirection: "row",
@@ -236,7 +337,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: "gray",
     marginTop: 20,
-    lineHeight: 18,
+    lineHeight: 1.8,
   },
   buttonRow: {
     flexDirection: "row",
@@ -268,5 +369,17 @@ const styles = StyleSheet.create({
   continueButtonText: {
     color: "#fff",
     fontWeight: "bold",
+  },
+  messageText: {
+    fontSize: 12,
+    marginTop: 5,
+    marginBottom: 10,
+    marginLeft: 10,
+  },
+  successText: {
+    color: "green",
+  },
+  errorText: {
+    color: "red",
   },
 });
