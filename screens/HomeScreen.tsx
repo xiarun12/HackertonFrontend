@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet, Alert } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../App";
@@ -13,16 +13,35 @@ const HomeScreen: React.FC = () => {
     navigation.navigate("BodySelect");
   };
 
+  const handleLogout = () => {
+    Alert.alert(
+      "로그아웃",
+      "정말 로그아웃 하시겠습니까?",
+      [
+        {
+          text: "취소",
+          style: "cancel",
+        },
+        {
+          text: "확인",
+          onPress: () => navigation.replace("Login"),
+        },
+      ]
+    );
+  };
+
   return (
     <View style={styles.container}>
-      {/* 상단 제목 부분 */}
+      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+        <Text style={styles.logoutButtonText}>로그아웃</Text>
+      </TouchableOpacity>
+
       <Text style={styles.title}>
         증상을 입력하면 AI가{"\n"}
         맞춤 병원을{"\n"}
         찾아드립니다.
       </Text>
-      
-      {/* '시작하기' 버튼 */}
+
       <TouchableOpacity
         style={styles.button}
         onPress={handleStartPress}
@@ -30,7 +49,6 @@ const HomeScreen: React.FC = () => {
         <Text style={styles.buttonText}>시작하기</Text>
       </TouchableOpacity>
 
-      {/* 하단 탭바 부분 */}
       <View style={styles.tabBar}>
         <View style={styles.tabItem}>
           <Text style={styles.tabIcon}>🔍</Text>
@@ -52,16 +70,30 @@ const HomeScreen: React.FC = () => {
 export default HomeScreen;
 
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    justifyContent: "center", 
+  container: {
+    flex: 1,
+    justifyContent: "center",
     alignItems: "center",
     backgroundColor: "#fff",
   },
-  title: { 
+  logoutButton: {
+    position: 'absolute',
+    top: 60,
+    right: 20,
+    backgroundColor: '#6c757d',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+  },
+  logoutButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  title: {
     fontSize: 22,
     fontWeight: "bold",
-    textAlign: "center", 
+    textAlign: "center",
     marginBottom: 50,
     lineHeight: 35,
   },
@@ -72,8 +104,8 @@ const styles = StyleSheet.create({
     width: "80%",
     alignItems: "center",
   },
-  buttonText: { 
-    color: "#fff", 
+  buttonText: {
+    color: "#fff",
     fontWeight: "bold",
     fontSize: 16,
   },
@@ -92,7 +124,7 @@ const styles = StyleSheet.create({
   },
   tabItem: {
     alignItems: "center",
-    width: "33.333%", 
+    width: "33.333%",
     paddingTop: 10,
     paddingBottom: 5,
   },
