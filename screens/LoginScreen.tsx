@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Image, Alert } from "react-native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import axios from "axios";
-import AsyncStorage from '@react-native-async-storage/async-storage';
+// AsyncStorage import를 제거했습니다.
 
 // API 서버의 기본 URL을 상수로 관리합니다.
 const API_URL = "http://43.203.141.216:8080/api";
@@ -36,19 +36,8 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
         console.log("accessToken:", accessToken);
         console.log("refreshToken:", refreshToken);
 
-        // 3. 토큰을 AsyncStorage에 저장
-        try {
-          await AsyncStorage.setItem('accessToken', accessToken);
-          await AsyncStorage.setItem('refreshToken', refreshToken);
-          console.log('토큰이 성공적으로 저장되었습니다.');
-
-          // 4. 토큰 저장 후 홈 화면으로 이동
-          navigation.replace("Home");
-
-        } catch (storageError) {
-          console.error('토큰 저장에 실패했습니다:', storageError);
-          Alert.alert("오류", "로그인 데이터를 저장하는 데 실패했습니다. 다시 시도해주세요.");
-        }
+        // AsyncStorage 저장 로직을 제거하고 바로 홈 화면으로 이동합니다.
+        navigation.replace("Home");
       }
     } catch (error: any) {
       // Axios 에러 처리
