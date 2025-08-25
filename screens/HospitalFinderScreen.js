@@ -8,35 +8,16 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import Geolocation from 'react-native-geolocation-service';
 
-// --- 1. 병원 이미지를 import 합니다. (경로가 다르면 수정해주세요) ---
 import HospitalImageFile from '../picture/병원.jpg';
 
-
-// --- 거리 계산 함수 ---
-const getDistance = (lat1, lon1, lat2, lon2) => {
-    if (!lat1 || !lon1 || !lat2 || !lon2) {
-        return 0;
-    }
-    const R = 6371; // 지구의 반지름 (km)
-    const dLat = (lat2 - lat1) * (Math.PI / 180);
-    const dLon = (lon2 - lon1) * (Math.PI / 180);
-    const a =
-        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-        Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
-        Math.sin(dLon / 2) * Math.sin(dLon / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c;
-};
-
-// --- HospitalItem 컴포넌트 ---
+// --- HospitalItem 컴포넌트 (기존과 동일) ---
 const HospitalItem = memo(({ hospital, onPress }) => (
     <TouchableOpacity style={styles.hospitalItemContainer} onPress={() => onPress(hospital)}>
-        {/* 2. Image source를 import한 파일로 고정합니다. */}
         <Image source={HospitalImageFile} style={styles.hospitalImage} />
         <View style={styles.hospitalDetails}>
             <Text style={styles.hospitalName}>{hospital.name}</Text>
             <Text style={styles.hospitalDistance}>
-                {typeof hospital.distance === 'number' ? `${hospital.distance.toFixed(1)}km · ` : ''}
+                {typeof hospital.distanceInKm === 'number' ? `${hospital.distanceInKm.toFixed(1)}km · ` : ''}
                 {hospital.address}
             </Text>
             <Text style={styles.hospitalHours}>
@@ -57,12 +38,16 @@ const HospitalFinderScreen = () => {
     const { recommendedHospitals } = route.params || {};
 
     const [hospitals, setHospitals] = useState(recommendedHospitals || []);
-    const [loading, setLoading] = useState(true);
+    // 1. 초기 로딩 상태를 false로 변경하고, 위치 요청 시 true로 설정합니다.
+    const [loading, setLoading] = useState(false);
     const [location, setLocation] = useState(null);
     const mapViewRef = useRef(null);
-    const defaultLocation = { latitude: 37.3854, longitude: 126.9743 };
+    
+    // 2. defaultLocation 상수를 제거합니다.
+    // const defaultLocation = { latitude: 37.3854, longitude: 126.9743 };
 
     const requestLocationPermission = async (showAlert = true) => {
+        setLoading(true); // 위치 요청 시작
         let granted;
         if (Platform.OS === 'android') {
             granted = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION);
@@ -73,8 +58,9 @@ const HospitalFinderScreen = () => {
         if (granted === PermissionsAndroid.RESULTS.GRANTED || granted === true) {
             getCurrentLocation();
         } else {
-            if (showAlert) Alert.alert("권한 거부", "거리 계산을 위해 기본 위치를 사용합니다.");
-            setLocation(defaultLocation);
+            // 3. 권한 거부 시 location을 null로 유지하고 로딩만 종료합니다.
+            if (showAlert) Alert.alert("권한 거부", "현재 위치를 알 수 없어 지도 기능이 비활성화됩니다.");
+            setLocation(null);
             setLoading(false);
         }
     };
@@ -87,7 +73,8 @@ const HospitalFinderScreen = () => {
             },
             (error) => {
                 console.log(error);
-                setLocation(defaultLocation);
+                // 4. 위치 획득 실패 시에도 location을 null로 유지하고 로딩만 종료합니다.
+                setLocation(null);
                 setLoading(false);
             },
             { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
@@ -100,13 +87,10 @@ const HospitalFinderScreen = () => {
         }, [])
     );
     
-    const hospitalsWithDistance = useMemo(() => {
-        if (!location || !hospitals) return [];
-        return hospitals.map(hospital => ({
-            ...hospital,
-            distance: getDistance(location.latitude, location.longitude, hospital.y, hospital.x)
-        })).sort((a, b) => a.distance - b.distance);
-    }, [hospitals, location]);
+    const sortedHospitals = useMemo(() => {
+        if (!hospitals) return [];
+        return [...hospitals].sort((a, b) => a.distanceInKm - b.distanceInKm);
+    }, [hospitals]);
 
     const handleHospitalPress = (hospital) => {
         if (mapViewRef.current && hospital.y && hospital.x) {
@@ -119,11 +103,13 @@ const HospitalFinderScreen = () => {
         }
         navigation.navigate('HospitalDetailScreen', { 
             hospital: hospital,
+            // location이 null일 수 있으므로, 방어적으로 전달
             userLocation: location 
         });
     };
 
-    if (loading && !location) {
+    // 5. 로딩 조건 단순화 (초기 위치 요청 중에만 표시)
+    if (loading) {
         return (
             <SafeAreaView style={styles.loadingContainer}>
                 <ActivityIndicator size="large" />
@@ -141,13 +127,14 @@ const HospitalFinderScreen = () => {
                 <Text style={styles.headerTitle}>병원 찾기</Text>
                 <TouchableOpacity
                     style={[styles.headerButton, styles.emergencyButton]}
-                    // 3. 응급실 버튼 클릭 시 EmergencyReportScreen으로 이동하도록 수정
                     onPress={() => navigation.navigate('EmergencyReport')}
                 >
                     <Ionicons name="alert-circle-outline" size={20} color="#fff" />
-                    <Text style={styles.emergencyText}>응급실</Text>
+                    <Text style={styles.emergencyText}>응급 신고</Text>
                 </TouchableOpacity>
             </View>
+
+            {/* 6. location 상태가 유효할 때만 지도를 표시합니다. */}
             {location && (
                 <View style={styles.mapContainer}>
                     <MapView
@@ -163,7 +150,7 @@ const HospitalFinderScreen = () => {
                         showsUserLocation={true}
                         showsMyLocationButton={true}
                     >
-                        {hospitalsWithDistance.map(hospital => 
+                        {sortedHospitals.map(hospital => 
                             (hospital.y && hospital.x) && (
                                 <Marker
                                     key={hospital.id.toString()}
@@ -175,6 +162,7 @@ const HospitalFinderScreen = () => {
                     </MapView>
                 </View>
             )}
+
             <View style={styles.filterContainer}>
                 {['내 주변', '진료과', '접수', '대기 중', '야간 진료'].map((filter) => (
                     <TouchableOpacity key={filter} style={styles.filterButton}>
@@ -183,9 +171,9 @@ const HospitalFinderScreen = () => {
                 ))}
             </View>
             
-            {hospitalsWithDistance && hospitalsWithDistance.length > 0 ? (
+            {sortedHospitals.length > 0 ? (
                 <FlatList
-                    data={hospitalsWithDistance}
+                    data={sortedHospitals}
                     renderItem={({ item }) => <HospitalItem hospital={item} onPress={handleHospitalPress} />}
                     keyExtractor={item => item.id.toString()}
                     contentContainerStyle={styles.listContentContainer}

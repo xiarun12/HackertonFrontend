@@ -1,19 +1,19 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
     View, Text, StyleSheet, TextInput, Image, TouchableOpacity, ScrollView,
-    ActivityIndicator
+    // 1. 필요한 모듈들을 다시 import 합니다.
+    PermissionsAndroid, Platform, Alert, ActivityIndicator
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { StackNavigationProp } from "@react-navigation/stack";
-import { Double } from "react-native/Libraries/Types/CodegenTypes";
-
-// Geolocation 관련 import는 모두 제거합니다.
+// 2. Geolocation 라이브러리를 다시 import 합니다.
+import Geolocation from 'react-native-geolocation-service';
 
 // --- 타입 정의 ---
 interface Hospital {
     id: number | string;
     name: string;
-    // ... 이하 다른 타입 정의는 프로젝트에 맞게 유지
+    // ...
 }
 
 interface ChatMessage {
@@ -25,8 +25,8 @@ type RootStackParamList = {
     SymptomChat: undefined;
     Loading: {
         symptom: string;
-        latitude: Double;
-        longitude: Double;
+        latitude: number;
+        longitude: number;
     };
     HospitalFinder: { recommendedHospitals: Hospital[] };
 };
@@ -43,34 +43,68 @@ const SymptomChatScreen = () => {
             content: "안녕하세요, 아프지아냥 챗봇입니다.\n증상이나 궁금한 점을 말씀해 주시면, \n관련 정보를 안내하고 가까운 병원을 추천해 드리겠습니다.",
         },
     ]);
-    const [isLoading, setIsLoading] = useState<boolean>(false);
+    // 로딩 상태 변수 이름을 isLocating으로 변경하여 의미를 명확하게 합니다.
+    const [isLocating, setIsLocating] = useState<boolean>(false);
     const chatAreaRef = useRef<ScrollView>(null);
 
     useEffect(() => {
         chatAreaRef.current?.scrollToEnd({ animated: true });
     }, [chatLog]);
 
-    // 메시지 전송 핸들러
-    const handleSendMessage = () => {
-        if (message.trim().length === 0 || isLoading) return;
+    // 3. 위치 정보 권한을 요청하는 함수를 다시 추가합니다.
+    const requestLocationPermission = async (): Promise<boolean> => {
+        if (Platform.OS === 'android') {
+            const granted = await PermissionsAndroid.request(
+                PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+                {
+                    title: "위치 정보 권한",
+                    message: "주변 병원 추천을 위해 위치 정보 권한이 필요합니다.",
+                    buttonPositive: "허용"
+                }
+            );
+            return granted === PermissionsAndroid.RESULTS.GRANTED;
+        } else {
+            const status = await Geolocation.requestAuthorization("whenInUse");
+            return status === 'granted';
+        }
+    };
 
-        setIsLoading(true);
+    // 4. 메시지 전송 시 사용자의 실제 위치를 가져오도록 수정합니다.
+    const handleSendMessage = async () => {
+        if (message.trim().length === 0 || isLocating) return;
+
+        setIsLocating(true);
         const userMessage: ChatMessage = { type: "user", content: message };
         setChatLog(prevChat => [...prevChat, userMessage]);
         setMessage("");
 
-        // --- 📍 범계역 위치 정보 고정 ---
-        const BUMGYE_STATION_LATITUDE = 37.3854;
-        const BUMGYE_STATION_LONGITUDE = 126.9743;
+        try {
+            const hasPermission = await requestLocationPermission();
+            if (!hasPermission) {
+                throw new Error("위치 정보 권한이 거부되었습니다.");
+            }
 
-        // LoadingScreen으로 증상과 고정된 좌표 전달
-        navigation.navigate("Loading", {
-            symptom: userMessage.content,
-            latitude: BUMGYE_STATION_LATITUDE,
-            longitude: BUMGYE_STATION_LONGITUDE,
-        });
-        
-        setIsLoading(false);
+            Geolocation.getCurrentPosition(
+                (position) => {
+                    const { latitude, longitude } = position.coords;
+                    // LoadingScreen으로 증상과 '실시간' 좌표를 전달합니다.
+                    navigation.navigate("Loading", {
+                        symptom: userMessage.content,
+                        latitude: latitude,
+                        longitude: longitude,
+                    });
+                    setIsLocating(false);
+                },
+                (error) => {
+                    console.log(error);
+                    throw new Error("현재 위치를 가져올 수 없습니다.");
+                },
+                { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
+            );
+        } catch (error) {
+            Alert.alert("오류", error instanceof Error ? error.message : "알 수 없는 오류가 발생했습니다.");
+            setIsLocating(false);
+        }
     };
 
     return (
@@ -106,7 +140,7 @@ const SymptomChatScreen = () => {
                         </View>
                     )
                 ))}
-                {isLoading && <ActivityIndicator style={{ marginVertical: 10 }} size="small" />}
+                {isLocating && <ActivityIndicator style={{ marginVertical: 10 }} size="small" />}
             </ScrollView>
 
             <View style={styles.inputContainer}>
@@ -116,17 +150,17 @@ const SymptomChatScreen = () => {
                     style={styles.input}
                     value={message}
                     onChangeText={setMessage}
-                    editable={!isLoading}
+                    editable={!isLocating}
                 />
                 <TouchableOpacity style={styles.inputIcon}><Text>🎤</Text></TouchableOpacity>
-                <TouchableOpacity style={styles.sendButton} onPress={handleSendMessage} disabled={isLoading}>
-                    {isLoading ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.sendButtonText}>▲</Text>}
+                <TouchableOpacity style={styles.sendButton} onPress={handleSendMessage} disabled={isLocating}>
+                    {isLocating ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.sendButtonText}>▲</Text>}
                 </TouchableOpacity>
             </View>
         </View>
     );
 };
-// ... 기존 스타일 코드 ...
+
 export default SymptomChatScreen;
 
 const styles = StyleSheet.create({
@@ -273,7 +307,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginLeft: 10,
   },
-  // 오류 해결을 위해 추가된 부분
   sendButtonText: {
     color: '#fff',
     fontSize: 18,
