@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Image, Alert } from "react-native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import axios from "axios";
-// AsyncStorage를 사용하기 위해 import 합니다.
+// AsyncStorage를 사용하기 위해 import 합니다...
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // API URL
