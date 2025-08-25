@@ -8,39 +8,42 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import Geolocation from 'react-native-geolocation-service';
 
-// --- 유틸리티 함수: 거리 계산 ---
+// --- 1. 병원 이미지를 import 합니다. (경로가 다르면 수정해주세요) ---
+import HospitalImageFile from '../picture/병원.jpg';
+
+
+// --- 거리 계산 함수 ---
 const getDistance = (lat1, lon1, lat2, lon2) => {
-    if ((lat1 === lat2) && (lon1 === lon2)) {
+    if (!lat1 || !lon1 || !lat2 || !lon2) {
         return 0;
     }
-    const radlat1 = Math.PI * lat1 / 180;
-    const radlat2 = Math.PI * lat2 / 180;
-    const theta = lon1 - lon2;
-    const radtheta = Math.PI * theta / 180;
-    let dist = Math.sin(radlat1) * Math.sin(radlat2) + Math.cos(radlat1) * Math.cos(radlat2) * Math.cos(radtheta);
-    if (dist > 1) { dist = 1; }
-    dist = Math.acos(dist);
-    dist = dist * 180 / Math.PI;
-    dist = dist * 60 * 1.1515 * 1.609344;
-    return dist;
-}
+    const R = 6371; // 지구의 반지름 (km)
+    const dLat = (lat2 - lat1) * (Math.PI / 180);
+    const dLon = (lon2 - lon1) * (Math.PI / 180);
+    const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+};
 
 // --- HospitalItem 컴포넌트 ---
 const HospitalItem = memo(({ hospital, onPress }) => (
     <TouchableOpacity style={styles.hospitalItemContainer} onPress={() => onPress(hospital)}>
-        {hospital.image ? (
-            <Image source={{ uri: hospital.image }} style={styles.hospitalImage} />
-        ) : (
-            <View style={styles.hospitalImage} />
-        )}
+        {/* 2. Image source를 import한 파일로 고정합니다. */}
+        <Image source={HospitalImageFile} style={styles.hospitalImage} />
         <View style={styles.hospitalDetails}>
             <Text style={styles.hospitalName}>{hospital.name}</Text>
-            <Text style={styles.hospitalDistance}>{hospital.distance.toFixed(1)}km · {hospital.address}</Text>
-            <Text style={styles.hospitalHours}>{hospital.hours}</Text>
-            <View style={styles.reviewContainer}>
-                <Ionicons name="star" size={16} color="#FFD700" />
-                <Text style={styles.hospitalRating}>{hospital.rating}</Text>
-                <Text style={styles.hospitalReviews}>리뷰 {hospital.reviews} - {hospital.department}</Text>
+            <Text style={styles.hospitalDistance}>
+                {typeof hospital.distance === 'number' ? `${hospital.distance.toFixed(1)}km · ` : ''}
+                {hospital.address}
+            </Text>
+            <Text style={styles.hospitalHours}>
+                {hospital.businessHours} ({hospital.operatingStatus})
+            </Text>
+            <View>
+                <Text style={styles.recommendationReason}>{hospital.reasonForRecommendation}</Text>
             </View>
         </View>
     </TouchableOpacity>
@@ -51,46 +54,15 @@ const HospitalItem = memo(({ hospital, onPress }) => (
 const HospitalFinderScreen = () => {
     const navigation = useNavigation();
     const route = useRoute();
-    
     const { recommendedHospitals } = route.params || {};
 
     const [hospitals, setHospitals] = useState(recommendedHospitals || []);
     const [loading, setLoading] = useState(true);
     const [location, setLocation] = useState(null);
     const mapViewRef = useRef(null);
-    const defaultLocation = { latitude: 37.5665, longitude: 126.9780 };
+    const defaultLocation = { latitude: 37.3854, longitude: 126.9743 };
 
-    const refreshData = async () => {
-        console.log("데이터를 새로고침합니다...");
-        requestLocationPermission();
-
-        try {
-            const updatedHospitals = hospitals.map(h => ({
-                ...h,
-                reviews: (h.reviews || 0) + Math.floor(Math.random() * 2), 
-            }));
-            setHospitals(updatedHospitals);
-        } catch (error) {
-            console.error("데이터 새로고침 중 오류 발생:", error);
-        }
-    };
-    
-    useFocusEffect(
-        useCallback(() => {
-            if (!location) {
-                requestLocationPermission();
-            }
-
-            const intervalId = setInterval(refreshData, 15000);
-
-            return () => {
-                console.log("화면 벗어남. 새로고침 중단.");
-                clearInterval(intervalId);
-            };
-        }, [location])
-    );
-
-    const requestLocationPermission = async () => {
+    const requestLocationPermission = async (showAlert = true) => {
         let granted;
         if (Platform.OS === 'android') {
             granted = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION);
@@ -101,7 +73,7 @@ const HospitalFinderScreen = () => {
         if (granted === PermissionsAndroid.RESULTS.GRANTED || granted === true) {
             getCurrentLocation();
         } else {
-            if (location == null) Alert.alert("권한 거부", "위치 정보 권한이 거부되어 기본 위치로 지도를 표시합니다.");
+            if (showAlert) Alert.alert("권한 거부", "거리 계산을 위해 기본 위치를 사용합니다.");
             setLocation(defaultLocation);
             setLoading(false);
         }
@@ -115,13 +87,18 @@ const HospitalFinderScreen = () => {
             },
             (error) => {
                 console.log(error);
-                if (location == null) Alert.alert("위치 오류", "현재 위치를 가져올 수 없습니다. 기본 위치로 설정합니다.");
                 setLocation(defaultLocation);
                 setLoading(false);
             },
             { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
         );
     };
+    
+    useFocusEffect(
+        useCallback(() => {
+            requestLocationPermission(false); 
+        }, [])
+    );
     
     const hospitalsWithDistance = useMemo(() => {
         if (!location || !hospitals) return [];
@@ -132,7 +109,7 @@ const HospitalFinderScreen = () => {
     }, [hospitals, location]);
 
     const handleHospitalPress = (hospital) => {
-        if (mapViewRef.current) {
+        if (mapViewRef.current && hospital.y && hospital.x) {
             mapViewRef.current.animateToRegion({
                 latitude: hospital.y,
                 longitude: hospital.x,
@@ -140,10 +117,13 @@ const HospitalFinderScreen = () => {
                 longitudeDelta: 0.01,
             }, 1000);
         }
-        navigation.navigate('HospitalDetailScreen', { hospital });
+        navigation.navigate('HospitalDetailScreen', { 
+            hospital: hospital,
+            userLocation: location 
+        });
     };
 
-    if (loading) {
+    if (loading && !location) {
         return (
             <SafeAreaView style={styles.loadingContainer}>
                 <ActivityIndicator size="large" />
@@ -154,43 +134,47 @@ const HospitalFinderScreen = () => {
 
     return (
         <SafeAreaView style={styles.container}>
-             <View style={styles.header}>
-                 <TouchableOpacity style={styles.headerButton} onPress={() => navigation.goBack()}>
-                     <Ionicons name="chevron-back" size={24} color="#000" />
-                 </TouchableOpacity>
-                 <Text style={styles.headerTitle}>병원 찾기</Text>
-                 <TouchableOpacity
-                     style={[styles.headerButton, styles.emergencyButton]}
-                     onPress={() => { /* 응급실 로직 */ }}
-                 >
-                     <Ionicons name="alert-circle-outline" size={20} color="#fff" />
-                     <Text style={styles.emergencyText}>응급실</Text>
-                 </TouchableOpacity>
-             </View>
-            <View style={styles.mapContainer}>
-                <MapView
-                    ref={mapViewRef}
-                    style={StyleSheet.absoluteFill}
-                    provider={PROVIDER_GOOGLE}
-                    region={{
-                        latitude: location.latitude,
-                        longitude: location.longitude,
-                        latitudeDelta: 0.0922,
-                        longitudeDelta: 0.0421,
-                    }}
-                    showsUserLocation={true}
-                    showsMyLocationButton={true}
+            <View style={styles.header}>
+                <TouchableOpacity style={styles.headerButton} onPress={() => navigation.goBack()}>
+                    <Ionicons name="chevron-back" size={24} color="#000" />
+                </TouchableOpacity>
+                <Text style={styles.headerTitle}>병원 찾기</Text>
+                <TouchableOpacity
+                    style={[styles.headerButton, styles.emergencyButton]}
+                    // 3. 응급실 버튼 클릭 시 EmergencyReportScreen으로 이동하도록 수정
+                    onPress={() => navigation.navigate('EmergencyReport')}
                 >
-                    {hospitalsWithDistance.map(hospital => (
-                        <Marker
-                            key={hospital.id}
-                            coordinate={{ latitude: hospital.y, longitude: hospital.x }}
-                            title={hospital.name}
-                            description={hospital.department}
-                        />
-                    ))}
-                </MapView>
+                    <Ionicons name="alert-circle-outline" size={20} color="#fff" />
+                    <Text style={styles.emergencyText}>응급실</Text>
+                </TouchableOpacity>
             </View>
+            {location && (
+                <View style={styles.mapContainer}>
+                    <MapView
+                        ref={mapViewRef}
+                        style={StyleSheet.absoluteFill}
+                        provider={PROVIDER_GOOGLE}
+                        initialRegion={{
+                            latitude: location.latitude,
+                            longitude: location.longitude,
+                            latitudeDelta: 0.0922,
+                            longitudeDelta: 0.0421,
+                        }}
+                        showsUserLocation={true}
+                        showsMyLocationButton={true}
+                    >
+                        {hospitalsWithDistance.map(hospital => 
+                            (hospital.y && hospital.x) && (
+                                <Marker
+                                    key={hospital.id.toString()}
+                                    coordinate={{ latitude: hospital.y, longitude: hospital.x }}
+                                    title={hospital.name}
+                                />
+                            )
+                        )}
+                    </MapView>
+                </View>
+            )}
             <View style={styles.filterContainer}>
                 {['내 주변', '진료과', '접수', '대기 중', '야간 진료'].map((filter) => (
                     <TouchableOpacity key={filter} style={styles.filterButton}>
@@ -203,7 +187,7 @@ const HospitalFinderScreen = () => {
                 <FlatList
                     data={hospitalsWithDistance}
                     renderItem={({ item }) => <HospitalItem hospital={item} onPress={handleHospitalPress} />}
-                    keyExtractor={item => item.id}
+                    keyExtractor={item => item.id.toString()}
                     contentContainerStyle={styles.listContentContainer}
                 />
             ) : (
@@ -238,9 +222,7 @@ const styles = StyleSheet.create({
     hospitalName: { fontSize: 16, fontWeight: 'bold', marginBottom: 4 },
     hospitalDistance: { fontSize: 14, color: '#888', marginBottom: 2 },
     hospitalHours: { fontSize: 14, color: '#333', marginBottom: 4 },
-    reviewContainer: { flexDirection: 'row', alignItems: 'center' },
-    hospitalRating: { fontSize: 14, color: '#555', marginLeft: 4 },
-    hospitalReviews: { fontSize: 14, color: '#888', marginLeft: 4 },
+    recommendationReason: { fontSize: 13, color: '#0066E4', fontWeight: 'bold', marginTop: 4 },
     emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20, },
     emptyText: { fontSize: 18, fontWeight: 'bold', color: '#555', marginBottom: 8, },
     emptySubText: { fontSize: 14, color: '#888', textAlign: 'center', },

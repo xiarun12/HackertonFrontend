@@ -2,31 +2,29 @@ import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
-// 1. AsyncStorage를 import 합니다.
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Double } from 'react-native/Libraries/Types/CodegenTypes';
 
-// --- 타입 정의 (기존과 동일) ---
+// --- 타입 정의 ---
 interface Hospital {
-    id: number | string;
+    id: number;
     name: string;
-    hours: string;
-    rating: string;
-    reviews: number;
-    department: string;
-    image: string | null;
-    latitude: number;
-    longitude: number;
     address: string;
-    y?: number;
-    x?: number;
+    operatingStatus: string;
+    businessHours: string;
+    reasonForRecommendation: string;
+    latitude?: Double;
+    longitude?: Double;
+    y?: Double;
+    x?: Double;
 }
 
 type RootStackParamList = {
     SymptomChat: undefined;
     Loading: {
         symptom: string;
-        latitude: number;
-        longitude: number;
+        latitude: Double;
+        longitude: Double;
     };
     HospitalFinder: { recommendedHospitals: Hospital[] };
     HospitalDetailScreen: { hospital: Hospital };
@@ -54,22 +52,16 @@ const LoadingScreen = () => {
 
         const fetchHospitals = async () => {
             try {
-                // --- 🔐 AsyncStorage에서 토큰 가져오기 ---
-                // 2. 'accessToken' 키를 사용해 저장된 토큰을 불러옵니다.
                 const userToken = await AsyncStorage.getItem('accessToken');
-                
-                // 3. 토큰이 없는 경우 (로그인되지 않은 상태) 처리
                 if (!userToken) {
-                    // 여기서 로그인 화면으로 보내거나, 에러 처리를 할 수 있습니다.
                     throw new Error("로그인이 필요합니다. 인증 토큰을 찾을 수 없습니다.");
                 }
-                // --- 여기까지 ---
 
-                const response = await fetch('http://43.203.141.216:8080/api/hospitals/recommend', {
+                // --- ⬇️ API 엔드포인트 수정 ⬇️ ---
+                const response = await fetch('http://43.203.141.216:8080/api/recommend', {
                     method: 'POST',
                     headers: { 
                         'Content-Type': 'application/json',
-                        // 4. 불러온 userToken을 Authorization 헤더에 담아 전송
                         'Authorization': `Bearer ${userToken}` 
                     },
                     body: JSON.stringify({
@@ -78,6 +70,7 @@ const LoadingScreen = () => {
                         longitude,
                     }),
                 });
+                // --- ⬆️ 여기까지 수정 ⬆️ ---
 
                 if (!response.ok) {
                     const errorResult = await response.json().catch(() => ({ message: "서버 응답 오류" }));
@@ -86,11 +79,11 @@ const LoadingScreen = () => {
 
                 const result = await response.json();
 
-                if (result.data) {
-                    const hospitalsData: Hospital[] = result.data.map((hospital: Hospital) => ({
+                if (result.recommendations) {
+                    const hospitalsData: Hospital[] = result.recommendations.map((hospital: any) => ({
                         ...hospital,
                         id: hospital.id.toString(),
-                        y: hospital.latitude,
+                        y: hospital.latitude, 
                         x: hospital.longitude,
                     }));
                     

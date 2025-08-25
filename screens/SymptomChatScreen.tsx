@@ -1,26 +1,19 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
     View, Text, StyleSheet, TextInput, Image, TouchableOpacity, ScrollView,
-    PermissionsAndroid, Platform, Alert, ActivityIndicator
+    ActivityIndicator
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { StackNavigationProp } from "@react-navigation/stack";
-import Geolocation from 'react-native-geolocation-service';
+import { Double } from "react-native/Libraries/Types/CodegenTypes";
+
+// Geolocation 관련 import는 모두 제거합니다.
 
 // --- 타입 정의 ---
 interface Hospital {
     id: number | string;
     name: string;
-    hours: string;
-    rating: string;
-    reviews: number;
-    department: string;
-    image: string | null;
-    latitude: number;
-    longitude: number;
-    address: string;
-    y?: number;
-    x?: number;
+    // ... 이하 다른 타입 정의는 프로젝트에 맞게 유지
 }
 
 interface ChatMessage {
@@ -28,19 +21,17 @@ interface ChatMessage {
     content: string;
 }
 
-// React Navigation 파라미터 리스트 (LoadingScreen 추가)
 type RootStackParamList = {
     SymptomChat: undefined;
     Loading: {
         symptom: string;
-        latitude: number;
-        longitude: number;
+        latitude: Double;
+        longitude: Double;
     };
     HospitalFinder: { recommendedHospitals: Hospital[] };
 };
 
 type NavProp = StackNavigationProp<RootStackParamList, "SymptomChat">;
-
 
 // --- 컴포넌트 ---
 const SymptomChatScreen = () => {
@@ -52,75 +43,38 @@ const SymptomChatScreen = () => {
             content: "안녕하세요, 아프지아냥 챗봇입니다.\n증상이나 궁금한 점을 말씀해 주시면, \n관련 정보를 안내하고 가까운 병원을 추천해 드리겠습니다.",
         },
     ]);
-    const [isLocating, setIsLocating] = useState<boolean>(false); // API 로딩이 아닌, 위치 정보 조회 로딩
+    const [isLoading, setIsLoading] = useState<boolean>(false);
     const chatAreaRef = useRef<ScrollView>(null);
 
     useEffect(() => {
         chatAreaRef.current?.scrollToEnd({ animated: true });
     }, [chatLog]);
 
-    const requestLocationPermission = async (): Promise<boolean> => {
-        if (Platform.OS === 'android') {
-            const granted = await PermissionsAndroid.request(
-                PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-                {
-                    title: "위치 정보 권한",
-                    message: "주변 병원 추천을 위해 위치 정보 권한이 필요합니다.",
-                    buttonPositive: "허용"
-                }
-            );
-            return granted === PermissionsAndroid.RESULTS.GRANTED;
-        } else {
-            const status = await Geolocation.requestAuthorization("whenInUse");
-            return status === 'granted';
-        }
-    };
+    // 메시지 전송 핸들러
+    const handleSendMessage = () => {
+        if (message.trim().length === 0 || isLoading) return;
 
-    // 메시지 전송 핸들러 (API 호출 대신 LoadingScreen으로 이동)
-    const handleSendMessage = async () => {
-        if (message.trim().length === 0 || isLocating) return;
-
-        setIsLocating(true); // 위치 정보 가져오는 중...
+        setIsLoading(true);
         const userMessage: ChatMessage = { type: "user", content: message };
         setChatLog(prevChat => [...prevChat, userMessage]);
         setMessage("");
 
-        try {
-            const hasPermission = await requestLocationPermission();
-            if (!hasPermission) {
-                Alert.alert("권한 거부", "위치 정보 권한이 없어 병원을 추천할 수 없습니다.");
-                setIsLocating(false);
-                return;
-            }
+        // --- 📍 범계역 위치 정보 고정 ---
+        const BUMGYE_STATION_LATITUDE = 37.3854;
+        const BUMGYE_STATION_LONGITUDE = 126.9743;
 
-            Geolocation.getCurrentPosition(
-                (position) => {
-                    const { latitude, longitude } = position.coords;
-                    // API 호출 대신, LoadingScreen으로 증상과 좌표를 전달하며 이동
-                    navigation.navigate("Loading", {
-                        symptom: userMessage.content,
-                        latitude: latitude,
-                        longitude: longitude,
-                    });
-                    setIsLocating(false); // 이동 후 로딩 상태 해제
-                },
-                (error) => {
-                    console.log(error);
-                    Alert.alert("위치 오류", "현재 위치를 가져올 수 없습니다.");
-                    setIsLocating(false);
-                },
-                { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
-            );
-        } catch (error) {
-            console.error(error);
-            Alert.alert("오류", "알 수 없는 오류가 발생했습니다.");
-            setIsLocating(false);
-        }
+        // LoadingScreen으로 증상과 고정된 좌표 전달
+        navigation.navigate("Loading", {
+            symptom: userMessage.content,
+            latitude: BUMGYE_STATION_LATITUDE,
+            longitude: BUMGYE_STATION_LONGITUDE,
+        });
+        
+        setIsLoading(false);
     };
 
     return (
         <View style={styles.container}>
-            {/* 헤더, 상태바, 스텝 UI 등은 기존과 동일 */}
             <View style={styles.header}>
                 <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}><Text style={styles.backButtonText}>{"<"}</Text></TouchableOpacity>
                 <Text style={styles.headerTitle}>증상 선택하기</Text>
@@ -152,7 +106,7 @@ const SymptomChatScreen = () => {
                         </View>
                     )
                 ))}
-                {isLocating && <ActivityIndicator style={{ marginVertical: 10 }} size="small" />}
+                {isLoading && <ActivityIndicator style={{ marginVertical: 10 }} size="small" />}
             </ScrollView>
 
             <View style={styles.inputContainer}>
@@ -162,17 +116,17 @@ const SymptomChatScreen = () => {
                     style={styles.input}
                     value={message}
                     onChangeText={setMessage}
-                    editable={!isLocating}
+                    editable={!isLoading}
                 />
                 <TouchableOpacity style={styles.inputIcon}><Text>🎤</Text></TouchableOpacity>
-                <TouchableOpacity style={styles.sendButton} onPress={handleSendMessage} disabled={isLocating}>
-                    {isLocating ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.sendButtonText}>▲</Text>}
+                <TouchableOpacity style={styles.sendButton} onPress={handleSendMessage} disabled={isLoading}>
+                    {isLoading ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.sendButtonText}>▲</Text>}
                 </TouchableOpacity>
             </View>
         </View>
     );
 };
-
+// ... 기존 스타일 코드 ...
 export default SymptomChatScreen;
 
 const styles = StyleSheet.create({

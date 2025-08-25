@@ -1,7 +1,9 @@
 apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
-// apply from: "../../node_modules/react-native-vector-icons/fonts.gradle"
+
+// 👇 이 부분의 주석(//)을 제거하여 코드를 활성화합니다.
+apply from: "../../node_modules/react-native-vector-icons/fonts.gradle"
 
 /**
  * This is the configuration block to customize your React Native Android app.
